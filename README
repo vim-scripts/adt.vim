@@ -1,0 +1,31 @@
+This is a mirror of http://www.vim.org/scripts/script.php?script_id=4330
+
+This is an utility for android development, it works on the current folder, you must ensure that the initial path contains a AndroidManifest.xml file and build.xml file, so that ant build can be executed. 
+
+It can only run in Linux.
+
+Functions:
+	AdtLogcat	Fetch logs from android device and display in copen
+			window. If there are error or warning stacks, it will
+			be recorgnized as error, so that you can switch between
+			error message and codes by :cn and :cp. By default, it
+			is mapped as "Al"
+
+	AdtBuild`	Build the current android application, make sure there
+			are build.xml and AndroidMenifest.xml in current folder. 
+			The build log will be displayed in copen window, so
+			that you can switch between error message and codes by
+			:cn and :cp. By default, it is mapped as "Ab"
+
+	AdtRun	Run the current android application, make sure there
+			are build.xml and AndroidMenifest.xml in current
+			folder. By default, it is mapped as "Ar"
+
+	AdtClean	Clean the current android application build
+			envirovement. By default, it is mapped as "Ac"
+
+	AdtHelp	Display the android documents for word under current
+			cursor. By default, it is mapped as "Ah"
+	AdtJumpResouce	If the word under cursor is layout resource, it will
+			open the xml layout resource in a splitted window. By
+			default, it is mapped as "Aj"
