@@ -21,6 +21,10 @@
 "	AdtClean	Clean the current android application build
 "			envirovement. By default, it is mapped as "Ac"
 "
+"	AdtHelp		Get the help information of the word under cursor,
+"			the cooresponding html file in android docs folder
+"			will be opened by xdg-open. By default, it is mapped
+"			as "Ah"
 
 function! AdtLogcat()
 	exec "cclose"
@@ -121,6 +125,15 @@ function! AdtBuild()
 
 	let l:antRet = Ant("debug")
 	if len(l:antRet) != 0
+		let idx = 0
+		let l:regAaptErr = "\\v\\s{-}\\[aapt\\]\\s(\\/\\S{-}){-}\\/\\S{-}\\:\\d+\\:\\serror\\:"
+		for line in l:antRet
+			if match(line, l:regAaptErr) > -1
+				let line = substitute(line,"\\v\\s{-}\\[aapt\\]\\s", "    [javac]", "") 
+				let l:antRet[idx] = line
+			endif
+			let l:idx = l:idx + 1
+		endfor
 		call writefile(l:antRet, "/tmp/l.txt")
 		set efm=%E\ \ \ \ [javac]%f:%l:\ %m
 		set makeprg=cat\ /tmp/l.txt
@@ -147,6 +160,34 @@ function! AdtClean()
 	else
 		echo "Clean successful."
 		return 0
+	endif
+endf
+
+function! AdtHelp()
+	let l:line = getline(line("."))
+	let l:col = col(".")
+	let l:lineH1 = strpart(l:line, 0, l:col)
+	let l:lineH1 = matchstr(l:lineH1, "\\v<[a-zA-Z_][a-zA-Z0-9_$]*$")
+	let l:lineH2 = strpart(l:line, l:col)
+	let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9_$]*")
+	let l:word = l:lineH1.l:lineH2
+	"let l:tags = taglist(l:word)
+	let l:path = system("which android")
+	if empty(l:path)
+		echo "Android is not installed, documents not found package"
+	else
+		let l:path = matchstr(l:path, "\\v\\S+(\\/tools\\/android)\@=")
+		let l:cmd = "find ".l:path." -name ".l:word.".html"
+		let l:finds = system(l:cmd)
+		let l:fileList = split(l:finds, "\n")
+		if len(l:fileList) == 1
+			call system("xdg-open ".l:fileList[0])
+		elseif len(l:fileList) > 1
+			let l:idx = inputlist(l:fileList)
+			call system("xdg-open ".l:fileList[l:idx])
+		else
+			echo "Keyword ".l:word." is not found in android documents"
+		endif
 	endif
 endf
 
@@ -203,7 +244,11 @@ function! GetMainActivity(path)
 		for action in l:actions
 			let l:actName = GetProperty(action, 'android:name')
 			if l:actName == "android.intent.action.MAIN"
-				let l:ret = l:activityName
+				if match(l:activityName, "\\.") == -1
+					let l:ret = ".".l:activityName
+				else
+					let l:ret = l:activityName
+				endif
 				break
 			endif
 		endfor
@@ -326,3 +371,4 @@ nmap Al :call AdtLogcat()<cr>
 nmap Ab :call AdtBuild()<cr>
 nmap Ac :call AdtClean()<cr>
 nmap Ar :call AdtRun()<cr>
+nmap Ah :call AdtHelp()<cr>
