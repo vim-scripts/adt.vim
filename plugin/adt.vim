@@ -26,6 +26,10 @@
 "			will be opened by xdg-open. By default, it is mapped
 "			as "Ah"
 
+if exists("g:adtVimHtmlViewer") == 0
+	let g:adtVimHtmlViewer = "xdg-open"
+endif
+
 function! AdtLogcat()
 	exec "cclose"
 	let l:devices = GetDevices()
@@ -66,7 +70,8 @@ function! AdtLogcat()
 		return 1
 	endif
 	let l:sourceDir = GetSourceDir()
-	let l:regPre = "\\v[WE]\\/System\\.err\\(".l:pid."\\)\\:\\s+at\\s*"
+	"let l:regPre = \\v[WE]\\/System\\.err\\(".l:pid."\\)\\:\\s+at\\s*"
+	let l:regPre = "\\v[WE]\\/\\S{-}\\(".l:pid."\\)\\:\\s+at\\s*"
 	let l:idx = 0
 	for line in l:logAppLines
 		let l:preLine = matchstr(line, l:regPre)
@@ -181,10 +186,10 @@ function! AdtHelp()
 		let l:finds = system(l:cmd)
 		let l:fileList = split(l:finds, "\n")
 		if len(l:fileList) == 1
-			call system("xdg-open ".l:fileList[0])
+			exec "!".g:adtVimHtmlViewer." ".l:fileList[0]
 		elseif len(l:fileList) > 1
 			let l:idx = inputlist(l:fileList)
-			call system("xdg-open ".l:fileList[l:idx])
+			exec "!".g:adtVimHtmlViewer." ".l:fileList[0]
 		else
 			echo "Keyword ".l:word." is not found in android documents"
 		endif
