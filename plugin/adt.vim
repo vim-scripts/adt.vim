@@ -39,26 +39,25 @@ function! AdtLogcat()
 	endif
 
 	let l:packageName = GetPackageName('./')
-	let l:packageName = substitute(l:packageName, "\\.", "\\\\.", "g")
 	if strlen(l:packageName) == 0
 		echo "Failed to fetch the package name"
 		return 1
 	endif
-	let l:logstr = system("adb shell logcat -d")
-	let l:logLines = split(logstr, "\n")
-	let l:regexp = "\\vActivityManager.*Start\\s*proc\\s*".l:packageName
-	let l:pid = ""
-	for line in l:logLines
+	let l:psStr = system("adb shell ps")
+	let l:psLines = split(l:psStr, "\n")
+	let l:regexp = "\\v\\S+\\s+(\\d+\\s+){4}([0-9a-fA-f]+\\s+){2}\\S+\\s+\\M".l:packageName
+	for line in l:psLines
 		if match(line, l:regexp) > -1
-			let l:pid = matchstr(line, "\\v\\s*pid\\s*\\=\\d+")
-			let l:pid = matchstr(l:pid, "\\v\\d+")
+			"let l:pid = matchstr(line, l:regexp)
+			let l:pid = matchstr(l:line, "\\v(^\\S+\\s+)\@<=\\d+(\\s+\\d+)\@=")
 		endif
 	endfor
-	let l:logAppLines = []
 	if empty(l:pid)
 		echo "Failed to fetch pid for ".l:packageName
 	endif
-
+	let l:logstr = system("adb shell logcat -d")
+	let l:logLines = split(logstr, "\n")
+	let l:logAppLines = []
 	for line in l:logLines
 		if match(line, "\\v[WDIE]\\/.{-}\\(".l:pid."\\)") > -1
 			call add(l:logAppLines, line)
@@ -66,7 +65,7 @@ function! AdtLogcat()
 	endfor
 
 	if len(l:logAppLines) == 0
-		echo "No logs for ".l:packageName." found"
+		echo "No logs for ".l:packageName."(Pid=".l:pid.") found"
 		return 1
 	endif
 	let l:sourceDir = GetSourceDir()
@@ -113,7 +112,6 @@ function! AdtRun()
 		exec "copen"	
 		return 1
 	else
-		echo "Success to install."
 		let l:packageName = GetPackageName('./')
 		let l:mainActivity = GetMainActivity('./')
 		let l:cmd = "adb shell am start -n ".l:packageName."/".l:mainActivity
@@ -183,6 +181,7 @@ function! AdtHelp()
 	else
 		let l:path = matchstr(l:path, "\\v\\S+(\\/tools\\/android)\@=")
 		let l:cmd = "find ".l:path." -name ".l:word.".html"
+		echo "Searching..."
 		let l:finds = system(l:cmd)
 		let l:fileList = split(l:finds, "\n")
 		if len(l:fileList) == 1
