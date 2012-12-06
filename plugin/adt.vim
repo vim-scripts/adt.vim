@@ -25,10 +25,51 @@
 "			the cooresponding html file in android docs folder
 "			will be opened by xdg-open. By default, it is mapped
 "			as "Ah"
+"
+"	AdtJumpResouce	If the word under cursor is layout resource, it will
+"			open the xml layout resource in a splitted window. By
+"			default, it is mapped as "Aj"
 
 if exists("g:adtVimHtmlViewer") == 0
 	let g:adtVimHtmlViewer = "xdg-open"
 endif
+
+function! AdtJumpResource()
+	let l:line = getline(line("."))
+	let l:col = col(".")
+	let l:lineH1 = strpart(l:line, 0, l:col)
+	let l:lineH1 = matchstr(l:lineH1, "\\v<R\\.([a-zA-Z_][a-zA-Z0-9_$\\.]*)$")
+	let l:lineH2 = strpart(l:line, l:col)
+	let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9_$\\.]*")
+	let l:resourceName = l:lineH1.l:lineH2
+	let l:resourceLines = split(l:resourceName, "\\.")
+	if (len(l:resourceLines) != 3)
+		echo l:resourceName." seems not an resource, while it should look like R.string.xxx, R.drawable.xxx and R.layout.xxx"
+		return 1
+	endif
+	let l:layoutDirs = GetTargetDir("res/")
+	if l:resourceLines[1] == "layout"
+		let l:ret = []
+		let l:fileName = l:resourceLines[2].".xml"
+		for path in l:layoutDirs
+			let l:cmd = "find ".path." -name ".l:fileName
+			let l:retTmp = split(system(l:cmd), "\n")
+			let l:ret = extend(l:ret, l:retTmp)
+		endfor
+		if len(l:ret) == 0
+			echo "Not found for ".l:fileName." in folders:".join(l:layoutDirs, ", ")
+		else
+			let l:chooseLayout = GetInputLines(l:ret)
+			exec "sp ".l:chooseLayout
+		endif
+	elseif l:resourceLines[1] == "string"
+		echo "This is a string resource named as ".l:resourceName.", please email to me what do you want it to do?"
+	elseif l:resourceLines[1] == "drawable"
+		echo "This is a drawable resource named as ".l:resourceName.", please email to me what do you want it to do?"
+	else
+		echo l:resourceName. " is not resource of string, drawable nor layout"
+	endif
+endf
 
 function! AdtLogcat()
 	exec "cclose"
@@ -43,23 +84,25 @@ function! AdtLogcat()
 		echo "Failed to fetch the package name"
 		return 1
 	endif
+	let l:pid = ""
 	let l:psStr = system("adb shell ps")
 	let l:psLines = split(l:psStr, "\n")
 	let l:regexp = "\\v\\S+\\s+(\\d+\\s+){4}([0-9a-fA-f]+\\s+){2}\\S+\\s+\\M".l:packageName
 	for line in l:psLines
 		if match(line, l:regexp) > -1
-			"let l:pid = matchstr(line, l:regexp)
 			let l:pid = matchstr(l:line, "\\v(^\\S+\\s+)\@<=\\d+(\\s+\\d+)\@=")
 		endif
 	endfor
 	if empty(l:pid)
 		echo "Failed to fetch pid for ".l:packageName
+		return 1
 	endif
+
 	let l:logstr = system("adb shell logcat -d")
 	let l:logLines = split(logstr, "\n")
 	let l:logAppLines = []
 	for line in l:logLines
-		if match(line, "\\v[WDIE]\\/.{-}\\(".l:pid."\\)") > -1
+		if match(line, "\\v[WDIE]\\/.{-}\\(\\s*".l:pid."\\s*\\)") > -1
 			call add(l:logAppLines, line)
 		endif
 	endfor
@@ -68,9 +111,8 @@ function! AdtLogcat()
 		echo "No logs for ".l:packageName."(Pid=".l:pid.") found"
 		return 1
 	endif
-	let l:sourceDir = GetSourceDir()
-	"let l:regPre = \\v[WE]\\/System\\.err\\(".l:pid."\\)\\:\\s+at\\s*"
-	let l:regPre = "\\v[WE]\\/\\S{-}\\(".l:pid."\\)\\:\\s+at\\s*"
+	let l:sourceDir = GetTargetDir("src/")
+	let l:regPre = "\\v[WE]\\/\\S{-}\\s*\\(\\s*".l:pid."\\s*\\)\\:\\s+at\\s*"
 	let l:idx = 0
 	for line in l:logAppLines
 		let l:preLine = matchstr(line, l:regPre)
@@ -184,14 +226,29 @@ function! AdtHelp()
 		echo "Searching..."
 		let l:finds = system(l:cmd)
 		let l:fileList = split(l:finds, "\n")
-		if len(l:fileList) == 1
-			exec "!".g:adtVimHtmlViewer." ".l:fileList[0]
-		elseif len(l:fileList) > 1
-			let l:idx = inputlist(l:fileList)
+		if len(l:fileList) > 0
+			let l:fn = GetInputLines(l:fileList)
 			exec "!".g:adtVimHtmlViewer." ".l:fileList[0]
 		else
 			echo "Keyword ".l:word." is not found in android documents"
 		endif
+	endif
+endf
+
+function! GetInputLines(chooseList)
+	if len(a:chooseList) == 1
+		return a:chooseList[0]
+	else
+		let l:displayInput = []
+		let l:idx = 1
+		for line in a:chooseList
+			let l:displayLine = l:idx.":\t".line
+			call add(l:displayInput, l:displayLine)
+			let l:idx = l:idx + 1
+		endfor
+		Date
+		let l:idx = inputlist(l:displayInput)
+		return a:chooseList[l:idx - 1]
 	endif
 endf
 
@@ -222,15 +279,15 @@ function! GetFileName(dirs, packageName, fn)
 	return l:ret
 endf
 
-function! GetSourceDir()
-	let l:ret = ["./src/"]
+function! GetTargetDir(target)
+	let l:ret = ["./".a:target]
 	let l:fn = "project.properties"
 	let l:regAndroidLibPrj = "\\v(android\\.library\\.reference\\.\\d+\\s*\\=)@<=\\S+($)\@="
 	let l:lines = readfile(l:fn, '')
 	for line in l:lines
 		let l:libSource = matchstr(line, l:regAndroidLibPrj)
 		if !empty(l:libSource)
-			call add(l:ret, l:libSource."/src/")
+			call add(l:ret, l:libSource."/".a:target)
 		endif
 	endfor
 
@@ -376,3 +433,4 @@ nmap Ab :call AdtBuild()<cr>
 nmap Ac :call AdtClean()<cr>
 nmap Ar :call AdtRun()<cr>
 nmap Ah :call AdtHelp()<cr>
+nmap Aj :call AdtJumpResource()<cr>
