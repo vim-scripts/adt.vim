@@ -38,36 +38,73 @@ function! AdtJumpResource()
 	let l:line = getline(line("."))
 	let l:col = col(".")
 	let l:lineH1 = strpart(l:line, 0, l:col)
-	let l:lineH1 = matchstr(l:lineH1, "\\v<R\\.([a-zA-Z_][a-zA-Z0-9_$\\.]*)$")
 	let l:lineH2 = strpart(l:line, l:col)
-	let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9_$\\.]*")
-	let l:resourceName = l:lineH1.l:lineH2
-	let l:resourceLines = split(l:resourceName, "\\.")
-	if (len(l:resourceLines) != 3)
-		echo l:resourceName." seems not an resource, while it should look like R.string.xxx, R.drawable.xxx and R.layout.xxx"
+	let l:bns = split(bufname(winbufnr(winnr())), "\\.")
+	if (len(l:bns) == 0)
+		echo "File ".l:bn." is not supported, only *.java or *.xml support"
 		return 1
 	endif
-	let l:layoutDirs = GetTargetDir("res/")
-	if l:resourceLines[1] == "layout"
-		let l:ret = []
-		let l:fileName = l:resourceLines[2].".xml"
-		for path in l:layoutDirs
-			let l:cmd = "find ".path." -name ".l:fileName
-			let l:retTmp = split(system(l:cmd), "\n")
-			let l:ret = extend(l:ret, l:retTmp)
-		endfor
-		if len(l:ret) == 0
-			echo "Not found for ".l:fileName." in folders:".join(l:layoutDirs, ", ")
+
+	let l:bn = l:bns[-1]
+	let l:resourceType = ""
+	let l:resourceName = ""
+
+	if l:bn == "java"
+		let l:lineH1 = matchstr(l:lineH1, "\\v<R\\.([a-zA-Z_][a-zA-Z0-9_$\\.]*)$")
+		let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9_$\\.]*")
+		let l:resourceName = l:lineH1.l:lineH2
+		let l:resourceLines = split(l:resourceName, "\\.")
+		if (len(l:resourceLines) != 3)
+			echo l:resourceName." seems not an resource, while it should look like R.string.xxx, R.drawable.xxx and R.layout.xxx"
+			return 1
 		else
-			let l:chooseLayout = GetInputLines(l:ret)
-			exec "sp ".l:chooseLayout
+			let l:resourceType = l:resourceLines[1]
+			let l:resourceName = l:resourceLines[2]
 		endif
-	elseif l:resourceLines[1] == "string"
+	elseif l:bn == "xml"
+		let l:lineH1 = matchstr(l:lineH1, "\\v\\\"\\@([a-zA-z0-9\\_\\$\\/])*")
+		let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9\\_\\$]*\\\"")
+		let l:resourceName = l:lineH1.l:lineH2
+		let l:resourceType = matchstr(l:resourceName, "\\v(\\@)\@<=(\\a+)(\\/)\@=")
+		let l:resourceName = matchstr(l:resourceName, "\\v(\\/)\@<=([a-zA-z0-9\\_\\$]+)")
+	else
+		echo "File ".l:bn." is not supported, only *.java or *.xml support"
+		return 1
+	endif
+
+	let l:layoutDirs = GetTargetDir("res/")
+	if l:resourceType == "layout"
+		let l:fileName = l:resourceName.".xml"
+		if JumpToFile(l:layoutDirs, l:fileName) == 0
+			echo "Not found for ".l:fileName." in folders:".join(l:layoutDirs, ", ")
+		endif
+	elseif l:resourceType == "string"
 		echo "This is a string resource named as ".l:resourceName.", please email to me what do you want it to do?"
-	elseif l:resourceLines[1] == "drawable"
-		echo "This is a drawable resource named as ".l:resourceName.", please email to me what do you want it to do?"
+	elseif l:resourceType == "drawable"
+		let l:fileName = l:resourceName.".xml"
+		if JumpToFile(l:layoutDirs, l:fileName) == 0
+			echo "Not found for ".l:fileName." in folders:".join(l:layoutDirs, ", ")
+		endif
 	else
 		echo l:resourceName. " is not resource of string, drawable nor layout"
+	endif
+endf
+
+function! JumpToFile(layoutDirs, fileName)
+	let l:ret = []
+	for path in a:layoutDirs
+		let l:cmd = "find ".path." -name ".a:fileName
+		let l:retTmp = split(system(l:cmd), "\n")
+		let l:ret = extend(l:ret, l:retTmp)
+	endfor
+	if len(l:ret) == 0
+		return 0
+	else
+		let l:chooseLayout = GetInputLines(l:ret)
+		if !empty(l:chooseLayout)
+			exec "sp ".l:chooseLayout
+		endif 
+		return 1
 	endif
 endf
 
@@ -93,13 +130,24 @@ function! AdtLogcat()
 			let l:pid = matchstr(l:line, "\\v(^\\S+\\s+)\@<=\\d+(\\s+\\d+)\@=")
 		endif
 	endfor
+
+	let l:logstr = system("adb shell logcat -d")
+	let l:logLines = split(logstr, "\n")
+	if empty(l:pid)
+		let l:regexp = "\\vActivityManager.*Start\\s*proc\\s*".l:packageName
+		for line in l:logLines
+			if match(line, l:regexp) > -1
+				let l:pid = matchstr(line, "\\v\\s*pid\\s*\\=\\d+")
+				let l:pid = matchstr(l:pid, "\\v\\d+")
+			endif
+		endfor
+	endif
+
 	if empty(l:pid)
 		echo "Failed to fetch pid for ".l:packageName
 		return 1
 	endif
 
-	let l:logstr = system("adb shell logcat -d")
-	let l:logLines = split(logstr, "\n")
 	let l:logAppLines = []
 	for line in l:logLines
 		if match(line, "\\v[WDIE]\\/.{-}\\(\\s*".l:pid."\\s*\\)") > -1
@@ -111,6 +159,7 @@ function! AdtLogcat()
 		echo "No logs for ".l:packageName."(Pid=".l:pid.") found"
 		return 1
 	endif
+
 	let l:sourceDir = GetTargetDir("src/")
 	let l:regPre = "\\v[WE]\\/\\S{-}\\s*\\(\\s*".l:pid."\\s*\\)\\:\\s+at\\s*"
 	let l:idx = 0
@@ -129,6 +178,7 @@ function! AdtLogcat()
 		endif
 		let l:idx = l:idx + 1
 	endfor
+
 	call writefile(l:logAppLines, "/tmp/l.txt")
 	set efm=[E]%f:%l\ %m
 	set makeprg=cat\ /tmp/l.txt
@@ -146,8 +196,9 @@ function! AdtRun()
 	endif
 
 	echo "Installing..."
-	let l:antRet = Ant("installd")
-	if len(l:antRet) != 0
+	let l:antRet = Ant("installd", 1)
+	echo l:antRet
+	if match(l:antRet, "\\v^\\s+\\[exec\\]\\s+Failure\\s+\\[") != -1
 		call writefile(l:antRet, "/tmp/l.txt")
 		set makeprg=cat\ /tmp/l.txt
 		exec "silent make"
@@ -168,7 +219,7 @@ function! AdtBuild()
 	exec "cclose"
 	echo "Building..."
 
-	let l:antRet = Ant("debug")
+	let l:antRet = Ant("debug", 0)
 	if len(l:antRet) != 0
 		let idx = 0
 		let l:regAaptErr = "\\v\\s{-}\\[aapt\\]\\s(\\/\\S{-}){-}\\/\\S{-}\\:\\d+\\:\\serror\\:"
@@ -196,11 +247,13 @@ function! AdtClean()
 	exec "cclose"
 	echo "Clean..."
 
-	let l:antRet = Ant("clean")
+	let l:antRet = Ant("clean", 0)
 	if len(l:antRet) != 0
 		echo "failed"
 		call writefile(l:antRet, "/tmp/l.txt")
 		set makeprg=cat\ /tmp/l.txt
+		exec "silent make"
+		exec "copen"	
 		return 1
 	else
 		echo "Clean successful."
@@ -228,11 +281,16 @@ function! AdtHelp()
 		let l:fileList = split(l:finds, "\n")
 		if len(l:fileList) > 0
 			let l:fn = GetInputLines(l:fileList)
-			exec "!".g:adtVimHtmlViewer." ".l:fileList[0]
+			if !empty(l:fn)
+				exec "!".g:adtVimHtmlViewer." ".l:fn
+				return 0
+			endif
 		else
 			echo "Keyword ".l:word." is not found in android documents"
 		endif
 	endif
+
+	return 1
 endf
 
 function! GetInputLines(chooseList)
@@ -240,20 +298,27 @@ function! GetInputLines(chooseList)
 		return a:chooseList[0]
 	else
 		let l:displayInput = []
-		let l:idx = 1
+		let l:idx = 0
 		for line in a:chooseList
 			let l:displayLine = l:idx.":\t".line
 			call add(l:displayInput, l:displayLine)
 			let l:idx = l:idx + 1
 		endfor
-		Date
 		let l:idx = inputlist(l:displayInput)
-		return a:chooseList[l:idx - 1]
+		if (l:idx > -1 && l:idx < len(a:chooseList))
+			return a:chooseList[l:idx]
+		else
+			return ""
+		endif
 	endif
 endf
 
-function! Ant(para)
+function! Ant(para, noCheck)
 	let l:antRet = system("ant ".a:para)
+	if a:noCheck == 1
+		return split(l:antRet, "\n")
+	endif
+
 	let l:antSuccessReg = "\\vBUILD\\s+SUCCESSFUL.*Total\\s+time\\:\\s+\\d+\\s+second"
 	let l:antRunRet = matchstr(l:antRet, l:antSuccessReg)
 	if empty(l:antRunRet)
