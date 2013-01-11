@@ -111,8 +111,8 @@ endf
 function! AdtLogcat()
 	exec "cclose"
 	let l:devices = GetDevices()
-	if len(l:devices) == 0
-		echo "Failed to get log for no aviable Android device, please check by command \"adb devices\""
+	if len(l:devices) != 1
+		echo "Failed to get log because only one device is supported, please check by command \"adb devices\""
 		return 1
 	endif
 
@@ -191,13 +191,12 @@ function! AdtRun()
 	exec "cclose"
 	let l:devices = GetDevices()
 	if len(l:devices) == 0
-		echo "Installation cancled for no aviable Android device, please check by command \"adb devices\""
+		echo "Installation canceld because only one device is supported, please check by command \"adb devices\""
 		return 1
 	endif
 
 	echo "Installing..."
 	let l:antRet = Ant("installd", 1)
-	echo l:antRet
 	if match(l:antRet, "\\v^\\s+\\[exec\\]\\s+Failure\\s+\\[") != -1
 		call writefile(l:antRet, "/tmp/l.txt")
 		set makeprg=cat\ /tmp/l.txt
@@ -231,7 +230,7 @@ function! AdtBuild()
 			let l:idx = l:idx + 1
 		endfor
 		call writefile(l:antRet, "/tmp/l.txt")
-		set efm=%E\ \ \ \ [javac]%f:%l:\ %m
+		set efm=%E\ \ \ \ [javac]%f:%l:\ %m,%C\ \ \ \ [javac]\ %m,%C\ \ \ \ [javac]\ %m
 		set makeprg=cat\ /tmp/l.txt
 		exec "silent make"
 		exec "copen"	
@@ -265,7 +264,7 @@ function! AdtHelp()
 	let l:line = getline(line("."))
 	let l:col = col(".")
 	let l:lineH1 = strpart(l:line, 0, l:col)
-	let l:lineH1 = matchstr(l:lineH1, "\\v<[a-zA-Z_][a-zA-Z0-9_$]*$")
+	let l:lineH1 = matchstr(l:lineH1, "\\v<[a-zA-Z_][a-zA-Z0-9_\\.$]*$")
 	let l:lineH2 = strpart(l:line, l:col)
 	let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9_$]*")
 	let l:word = l:lineH1.l:lineH2
