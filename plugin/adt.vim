@@ -29,9 +29,15 @@
 "	AdtJumpResouce	If the word under cursor is layout resource, it will
 "			open the xml layout resource in a splitted window. By
 "			default, it is mapped as "Aj"
+"	AdtCreate	Create a new project, it is mapped as "Ap"
+
 
 if exists("g:adtVimHtmlViewer") == 0
 	let g:adtVimHtmlViewer = "xdg-open"
+endif
+
+if exists("g:adtVimAndroidPath") == 0
+	let g:adtVimAndroidPath = ""
 endif
 
 function! AdtJumpResource()
@@ -93,10 +99,11 @@ endf
 function! JumpToFile(layoutDirs, fileName)
 	let l:ret = []
 	for path in a:layoutDirs
-		let l:cmd = "find ".path." -name ".a:fileName
-		let l:retTmp = split(system(l:cmd), "\n")
+		let path = path."**"
+		let l:retTmp = findfile(a:fileName, path, -1)
 		let l:ret = extend(l:ret, l:retTmp)
 	endfor
+
 	if len(l:ret) == 0
 		return 0
 	else
@@ -108,7 +115,7 @@ function! JumpToFile(layoutDirs, fileName)
 	endif
 endf
 
-function! AdtLogcat()
+function! AdtLogcat(errorFilter)
 	exec "cclose"
 	let l:devices = GetDevices()
 	if len(l:devices) != 1
@@ -150,7 +157,7 @@ function! AdtLogcat()
 
 	let l:logAppLines = []
 	for line in l:logLines
-		if match(line, "\\v[WDIE]\\/.{-}\\(\\s*".l:pid."\\s*\\)") > -1
+		if match(line, "\\v[".a:errorFilter."]\\/.{-}\\(\\s*".l:pid."\\s*\\)") > -1
 			call add(l:logAppLines, line)
 		endif
 	endfor
@@ -204,14 +211,26 @@ function! AdtRun()
 		exec "copen"	
 		return 1
 	else
-		let l:packageName = GetPackageName('./')
-		let l:mainActivity = GetMainActivity('./')
-		let l:cmd = "adb shell am start -n ".l:packageName."/".l:mainActivity
-		echo "Starting activity..."
-		let l:execRet = system(l:cmd)
-		echo l:execRet
+		call AdtStart()
 		return 0
 	endif
+endf
+
+function! AdtStart()
+	exec "cclose"
+	let l:devices = GetDevices()
+	if len(l:devices) == 0
+		echo "Installation canceld because only one device is supported, please check by command \"adb devices\""
+		return 1
+	endif
+
+	let l:packageName = GetPackageName('./')
+	let l:mainActivity = GetMainActivity('./')
+	let l:cmd = "adb shell am start -n ".l:packageName."/".l:mainActivity
+	echo "Starting activity..."
+	let l:execRet = system(l:cmd)
+	echo l:execRet
+	return 0
 endf
 
 function! AdtBuild()
@@ -259,25 +278,62 @@ function! AdtClean()
 		return 0
 	endif
 endf
+"android create project -k cn.timefly.demo -a HelloAndroid -t 6 -p d:\test\HelloAndroid
+function! AdtCreate()
+	let l:pkg = input("The package for new project:")
+	let l:name = input("The name for new project, empty to use the package as project name:")
+	if (empty(l:name))
+		let l:name = l:pkg
+	endif
+	let l:path = input("The path for new project, empty to use current path:")
+	if (empty(l:path))
+		let l:path = "."
+	endif
+	let l:activity = input("The activity for new project:")
+	let l:target = input("The target for new project, like android-8, empty to use android-8 (Android 2.2):")
+	if (empty(l:target))
+		let l:target = 8
+	endif
+	let l:cmd = "!android create project -k ".l:pkg." -n ".l:name." -p ".l:path." -a ".l:activity." -t ".l:target
+	exec l:cmd
+endf
 
 function! AdtHelp()
 	let l:line = getline(line("."))
 	let l:col = col(".")
 	let l:lineH1 = strpart(l:line, 0, l:col)
-	let l:lineH1 = matchstr(l:lineH1, "\\v<[a-zA-Z_][a-zA-Z0-9_\\.$]*$")
+	let l:lineH1 = matchstr(l:lineH1, "\\v<[a-zA-Z_][a-zA-Z0-9_$]*$")
 	let l:lineH2 = strpart(l:line, l:col)
 	let l:lineH2 = matchstr(l:lineH2, "\\v[a-zA-Z0-9_$]*")
 	let l:word = l:lineH1.l:lineH2
 	"let l:tags = taglist(l:word)
-	let l:path = system("which android")
+	if empty(g:adtVimAndroidPath)
+		let l:path = system("which android")
+	else
+		let l:path = g:adtVimAndroidPath
+	endif
+	
 	if empty(l:path)
 		echo "Android is not installed, documents not found package"
 	else
-		let l:path = matchstr(l:path, "\\v\\S+(\\/tools\\/android)\@=")
-		let l:cmd = "find ".l:path." -name ".l:word.".html"
 		echo "Searching..."
-		let l:finds = system(l:cmd)
-		let l:fileList = split(l:finds, "\n")
+		let l:fileList = []
+		let l:path = matchstr(l:path, "\\v\\S+(\\/tools\\/android)\@=")
+		let l:classes = l:path . "/docs/reference/classes.html"
+		let l:lines = readfile(l:classes, '')
+		let l:searchReg = "\\v\\<a\\s+href\\=\\\".*\\\"\\>(.*\\.)*<".l:word.">(\\..*)*\\<\\/a\\>"
+		for line in l:lines
+			let l:linkName = matchstr(line, l:searchReg)
+			if (!empty(l:linkName))
+				let l:link = matchstr(l:linkName, "\\v(\\<a\\s+href\\=\\\")\@<=(.{-})(\\\"\\>.{-}\\<\\/a\\>)\@=")
+				let l:name = matchstr(l:linkName, "\\v(\\<a\\s+href\\=\\\".{-}\\\"\\>)\@<=(.{-})(\\<\\/a\\>)\@=")
+				let l:link = l:path."/docs/reference/".l:link
+				call add(l:fileList, l:link)
+			endif
+		endfor
+
+		"let l:finds = system(l:cmd)
+		"let l:fileList = split(l:finds, \"\n\")
 		if len(l:fileList) > 0
 			let l:fn = GetInputLines(l:fileList)
 			if !empty(l:fn)
@@ -344,7 +400,7 @@ function! GetFileName(dirs, packageName, fn)
 endf
 
 function! GetTargetDir(target)
-	let l:ret = ["./".a:target]
+	let l:ret = [a:target]
 	let l:fn = "project.properties"
 	let l:regAndroidLibPrj = "\\v(android\\.library\\.reference\\.\\d+\\s*\\=)@<=\\S+($)\@="
 	let l:lines = readfile(l:fn, '')
@@ -466,6 +522,9 @@ function! GetProperty(str, property)
 	return l:ret
 endf
 
+function! GetInput(hint)
+endf
+
 function! GetDevices()
 	let l:ret = []
 	let l:checkRets = system("adb devices")
@@ -492,9 +551,12 @@ function! GetDevices()
 	return l:ret
 endf
 
-nmap Al :call AdtLogcat()<cr>
+nmap Ap :call AdtCreate()<cr>
+nmap Ae :call AdtLogcat("E")<cr>
+nmap Al :call AdtLogcat("WDIE")<cr>
 nmap Ab :call AdtBuild()<cr>
 nmap Ac :call AdtClean()<cr>
 nmap Ar :call AdtRun()<cr>
+nmap As :call AdtStart()<cr>
 nmap Ah :call AdtHelp()<cr>
 nmap Aj :call AdtJumpResource()<cr>
