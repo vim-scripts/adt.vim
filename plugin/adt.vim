@@ -1,5 +1,26 @@
 "Author Chen Chi, call me Cook in English, and contact with me by
-"reallychenchi@163.com or reallychenchi@gmail.com
+"reallychenchi@163.com
+"
+"Usages:
+"	Copy adt.vim to the plugin folder of your vim location. 
+"	In the vimrc file, set some global variables
+"
+"	g:adtVimHtmlViewer	The Html viewer for open android help file, if
+"				not set, the default Html viewer is used.
+"
+"	g:adtVimAndroidPath	The locaion where android sdk is installed, if
+"				not set, in linux which android will be called
+"				and the output is taken as default; in windows
+"				it will keep empty and you will not be able to
+"				use AdtHelp
+"
+"	g:adtVimCat		In linux set it as cat, and in windows set it
+"				as type. If not set, cat will be the default
+"
+"	g:adtVimFile		The log file to used, if not set, /tmp/l.txt
+"				is used, so, for window it is a must to set,
+"				or else, you will not be able to locate build
+"				error automatically
 "
 "Functions:
 "	AdtLogcat	Fetch logs from android device and display in copen
@@ -8,7 +29,7 @@
 "			error message and codes by :cn and :cp. By default, it
 "			is mapped as "Al"
 "
-"	AdtBuild`	Build the current android application, make sure there
+"	AdtBuild	Build the current android application, make sure there
 "			are build.xml and AndroidMenifest.xml in current folder. 
 "			The build log will be displayed in copen window, so
 "			that you can switch between error message and codes by
@@ -29,8 +50,11 @@
 "	AdtJumpResouce	If the word under cursor is layout resource, it will
 "			open the xml layout resource in a splitted window. By
 "			default, it is mapped as "Aj"
+"
 "	AdtCreate	Create a new project, it is mapped as "Ap"
-
+"
+"	AdtStart	Start the default activity for current android
+"			application. By default, it is mapped as "As"
 
 if exists("g:adtVimHtmlViewer") == 0
 	let g:adtVimHtmlViewer = "xdg-open"
@@ -39,6 +63,15 @@ endif
 if exists("g:adtVimAndroidPath") == 0
 	let g:adtVimAndroidPath = ""
 endif
+
+if exists("g:adtVimCat") == 0
+	let g:adtVimCat = "cat"  "In windows, it shoud be type, default as cat
+endif
+
+if exists("g:adtVimFile") == 0
+	let g:adtVimFile = "/tmp/l.txt"  "In windows, it shoud be some other folder with read and write
+endif
+let g:mkprg = "set makeprg=".g:adtVimCat."\\ ".g:adtVimFile
 
 function! AdtJumpResource()
 	let l:line = getline(line("."))
@@ -186,9 +219,9 @@ function! AdtLogcat(errorFilter)
 		let l:idx = l:idx + 1
 	endfor
 
-	call writefile(l:logAppLines, "/tmp/l.txt")
+	call writefile(l:logAppLines, g:adtVimFile)
 	set efm=[E]%f:%l\ %m
-	set makeprg=cat\ /tmp/l.txt
+	exec g:mkprg
 	exec "silent make"
 	exec "copen"	
 	return 0
@@ -205,8 +238,8 @@ function! AdtRun()
 	echo "Installing..."
 	let l:antRet = Ant("installd", 1)
 	if match(l:antRet, "\\v^\\s+\\[exec\\]\\s+Failure\\s+\\[") != -1
-		call writefile(l:antRet, "/tmp/l.txt")
-		set makeprg=cat\ /tmp/l.txt
+		call writefile(l:antRet, g:adtVimFile)
+		exec g:mkprg
 		exec "silent make"
 		exec "copen"	
 		return 1
@@ -248,13 +281,17 @@ function! AdtBuild()
 			endif
 			let l:idx = l:idx + 1
 		endfor
-		call writefile(l:antRet, "/tmp/l.txt")
+		call writefile(l:antRet, g:adtVimFile)
 		set efm=%E\ \ \ \ [javac]%f:%l:\ %m,%C\ \ \ \ [javac]\ %m,%C\ \ \ \ [javac]\ %m
-		set makeprg=cat\ /tmp/l.txt
+		exec g:mkprg
 		exec "silent make"
 		exec "copen"	
 		return 1
 	else
+		call writefile(l:antRet, g:adtVimFile)
+		exec g:mkprg
+		exec "silent make"
+		exec "copen"	
 		echo "Build successful."
 		call AdtRun()
 		return 0
@@ -268,8 +305,8 @@ function! AdtClean()
 	let l:antRet = Ant("clean", 0)
 	if len(l:antRet) != 0
 		echo "failed"
-		call writefile(l:antRet, "/tmp/l.txt")
-		set makeprg=cat\ /tmp/l.txt
+		call writefile(l:antRet, g:adtVimFile)
+		exec g:mkprg
 		exec "silent make"
 		exec "copen"	
 		return 1
@@ -400,7 +437,7 @@ function! GetFileName(dirs, packageName, fn)
 endf
 
 function! GetTargetDir(target)
-	let l:ret = [a:target]
+	let l:ret = ["./".a:target]
 	let l:fn = "project.properties"
 	let l:regAndroidLibPrj = "\\v(android\\.library\\.reference\\.\\d+\\s*\\=)@<=\\S+($)\@="
 	let l:lines = readfile(l:fn, '')
