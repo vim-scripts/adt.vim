@@ -1,6 +1,8 @@
 This is a mirror of http://www.vim.org/scripts/script.php?script_id=4330
 
-This is an utility for android development, it works on the current folder, you must ensure that the initial path contains a AndroidManifest.xml file and build.xml file, so that ant build can be executed. 
+This is an utility for android development, it uses the first directory in which the user is located that looks like 
+ an Android project directory (i.e: a directory that contains AndroidManifest.xml or build.xml). You must ensure that 
+ you are located in a Android project directory when you use this script so that ant can be executed.
 
 It can run in windows and linux.
 
@@ -12,14 +14,15 @@ Functions:
 			is mapped as "Al"
 
 	AdtBuild	Build the current android application, make sure there
-			are build.xml and AndroidMenifest.xml in current folder. 
+			are build.xml and AndroidManifest.xml in the current folder or
+      one of its parents. 
 			The build log will be displayed in copen window, so
 			that you can switch between error message and codes by
 			:cn and :cp. By default, it is mapped as "Ab"
 
 	AdtRun		Run the current android application, make sure there
-			are build.xml and AndroidMenifest.xml in current
-			folder. By default, it is mapped as "Ar"
+			are build.xml and AndroidManifest.xml in the current folder or
+			one of its parents. By default, it is mapped as "Ar"
 
 	AdtClean	Clean the current android application build
 				envirovement. By default, it is mapped as "Ac"
