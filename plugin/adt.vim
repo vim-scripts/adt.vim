@@ -156,7 +156,7 @@ function! AdtLogcat(errorFilter)
 		return 1
 	endif
 
-	let l:packageName = GetPackageName('./')
+	let l:packageName = GetPackageName()
 	if strlen(l:packageName) == 0
 		echo "Failed to fetch the package name"
 		return 1
@@ -257,8 +257,8 @@ function! AdtStart()
 		return 1
 	endif
 
-	let l:packageName = GetPackageName('./')
-	let l:mainActivity = GetMainActivity('./')
+	let l:packageName = GetPackageName()
+	let l:mainActivity = GetMainActivity()
 	let l:cmd = "adb shell am start -n ".l:packageName."/".l:mainActivity
 	echo "Starting activity..."
 	let l:execRet = system(l:cmd)
@@ -406,7 +406,9 @@ function! GetInputLines(chooseList)
 endf
 
 function! Ant(para, noCheck)
-	let l:antRet = system("ant ".a:para)
+  let l:buildXmlPath = fnameescape(findfile('build.xml', '.;'))
+
+	let l:antRet = system("ant -buildfile ".l:buildXmlPath." ".a:para)
 	if a:noCheck == 1
 		return split(l:antRet, "\n")
 	endif
@@ -451,9 +453,9 @@ function! GetTargetDir(target)
 	return l:ret
 endf
 
-function! GetMainActivity(path)
+function! GetMainActivity()
 	let l:ret = ""
-	let l:fn = a:path . 'AndroidManifest.xml'
+  let l:fn = findfile('AndroidManifest.xml', '.;')
 	let l:str = GetFileContent(l:fn)
 	let l:nodes = GetNodes(l:str, 'manifest', 'application', 'activity')
 	for node in l:nodes
@@ -477,10 +479,11 @@ function! GetMainActivity(path)
 	return l:ret
 endf
 
-"The get package name from path
-function! GetPackageName(path)
+" Get the package name from AndroidManifest.xml (either in the
+"  same directory or one of its parents)
+function! GetPackageName()
 	let l:ret = ""
-	let l:fn = a:path . 'AndroidManifest.xml'
+  let l:fn = findfile('AndroidManifest.xml', '.;')
 	let l:str = GetFileContent(l:fn)
 	let l:nodes = GetNodes(l:str, 'manifest')
 	for node in l:nodes
